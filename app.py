@@ -5,6 +5,94 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# プロンプトテンプレートの定義
+PROMPT_BY_DURATION = """あなたは20年の経験を持つ旅行プランナーです。豊富な旅行経験から、効率的で実践的な持ち物リストを作成することが得意です。以下の条件に基づいて、旅行に必要な持ち物リストを作成してください。
+
+【旅行情報】
+- 旅行先: {destination}
+- {duration_info}
+- 旅のタイプ: {trip_type}
+- 追加情報: {additional_info}
+
+【指示】
+1. 旅行日数に合わせた効率的な持ち物リストを作成してください
+2. 必須アイテム、推奨アイテム、あると便利なアイテムに分類してください
+3. 各持ち物の推奨数量または量を明確に記載してください
+4. カテゴリ別（衣類、衛生用品、電子機器、旅行用品、その他）に分類して表示してください
+5. 旅行日数から予想される移動パターンや活動に合わせた持ち物を提案してください
+6. 旅の種類に特化した必須アイテムの説明も含めてください
+7. 荷物管理のコツやパッキングのアドバイスも含めてください
+
+実用的で、無駄のない持ち物リストを提供してください。"""
+
+PROMPT_BY_SEASON = """あなたは気象学の知識を持つ天気専門の旅行プランナーです。季節ごとの気象パターンに詳しく、その時期の天気変化に対応した最適な持ち物を提案することが得意です。以下の条件に基づいて、旅行に必要な持ち物リストを作成してください。
+
+【旅行情報】
+- 旅行先: {destination}
+- 季節: {season}
+- 旅のタイプ: {trip_type}
+- 追加情報: {additional_info}
+
+【指示】
+1. {season}の気象特性と予想される気象パターンを踏まえた持ち物リストを作成してください
+2. その季節特有の気象リスク（雨、雪、風、紫外線など）に対応する持ち物を強調してください
+3. 旅行先の気候と{season}の気象を組み合わせた適切な衣類を提案してください
+4. 各持ち物と気象条件の関連性を説明してください
+5. カテゴリ別（衣類・防具、天気対策、衛生用品、電子機器、その他）に分類して表示してください
+6. 天気急変時の対策や応急グッズも含めてください
+7. 旅行中の天気予報確認方法やアプリの利用についてもアドバイスしてください
+
+気象知識に基づいた、季節に最適化した持ち物リストを提供してください。"""
+
+
+def generate_packing_list(
+    destination: str,
+    selection_mode: str,
+    trip_type: str,
+    additional_info: str,
+    duration_days: int = None,
+    season: str = None
+) -> str:
+    """
+    入力情報に基づいて、AIが推奨する持ち物リストを生成する関数
+    
+    Args:
+        destination: 旅行先
+        selection_mode: "宿泊日数で計画" または "季節で計画"
+        trip_type: 旅のタイプ
+        additional_info: 追加情報
+        duration_days: 宿泊日数（selection_modeが"宿泊日数で計画"の場合）
+        season: 季節（selection_modeが"季節で計画"の場合）
+    
+    Returns:
+        str: LLMが生成した持ち物リスト
+    """
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+    
+    # 選択モードに応じてプロンプトテンプレートと引数を準備
+    if selection_mode == "宿泊日数で計画":
+        prompt_template = ChatPromptTemplate.from_template(PROMPT_BY_DURATION)
+        invoke_params = {
+            "destination": destination,
+            "duration_info": f"宿泊日数は{duration_days}日",
+            "trip_type": trip_type,
+            "additional_info": additional_info if additional_info else "なし"
+        }
+    else:
+        prompt_template = ChatPromptTemplate.from_template(PROMPT_BY_SEASON)
+        invoke_params = {
+            "destination": destination,
+            "season": season,
+            "trip_type": trip_type,
+            "additional_info": additional_info if additional_info else "なし"
+        }
+    
+    # LLM呼び出し（重複排除）
+    response = (prompt_template | llm).invoke(invoke_params)
+    
+    return response.content
+
+
 st.title("🧳 旅行持ち物プランナー")
 
 st.write("旅行に必要な持ち物をAIがおすすめしてくれます。")
@@ -64,83 +152,25 @@ if st.button("📋 持ち物リストを生成", use_container_width=True):
     if not destination:
         st.error("旅行先を入力してください。")
     else:
-        # プロンプトの構築
-        if selection_mode == "宿泊日数で計画":
-            duration_info = f"宿泊日数は{days}日"
-            # 旅行専門のプランナーペルソナ
-            prompt_template = ChatPromptTemplate.from_template(
-                """あなたは20年の経験を持つ旅行プランナーです。豊富な旅行経験から、効率的で実践的な持ち物リストを作成することが得意です。以下の条件に基づいて、旅行に必要な持ち物リストを作成してください。
-
-【旅行情報】
-- 旅行先: {destination}
-- {duration_info}
-- 旅のタイプ: {trip_type}
-- 追加情報: {additional_info}
-
-【指示】
-1. 旅行日数に合わせた効率的な持ち物リストを作成してください
-2. 必須アイテム、推奨アイテム、あると便利なアイテムに分類してください
-3. 各持ち物の推奨数量または量を明確に記載してください
-4. カテゴリ別（衣類、衛生用品、電子機器、旅行用品、その他）に分類して表示してください
-5. 旅行日数から予想される移動パターンや活動に合わせた持ち物を提案してください
-6. 旅の種類に特化した必須アイテムの説明も含めてください
-7. 荷物管理のコツやパッキングのアドバイスも含めてください
-
-実用的で、無駄のない持ち物リストを提供してください。"""
-            )
-        else:
-            duration_info = f"季節は{season}"
-            # 天気に詳しいプランナーペルソナ
-            prompt_template = ChatPromptTemplate.from_template(
-                """あなたは気象学の知識を持つ天気専門の旅行プランナーです。季節ごとの気象パターンに詳しく、その時期の天気変化に対応した最適な持ち物を提案することが得意です。以下の条件に基づいて、旅行に必要な持ち物リストを作成してください。
-
-【旅行情報】
-- 旅行先: {destination}
-- 季節: {season}
-- 旅のタイプ: {trip_type}
-- 追加情報: {additional_info}
-
-【指示】
-1. {season}の気象特性と予想される気象パターンを踏まえた持ち物リストを作成してください
-2. その季節特有の気象リスク（雨、雪、風、紫外線など）に対応する持ち物を強調してください
-3. 旅行先の気候と{season}の気象を組み合わせた適切な衣類を提案してください
-4. 各持ち物と気象条件の関連性を説明してください
-5. カテゴリ別（衣類・防具、天気対策、衛生用品、電子機器、その他）に分類して表示してください
-6. 天気急変時の対策や応急グッズも含めてください
-7. 旅行中の天気予報確認方法やアプリの利用についてもアドバイスしてください
-
-気象知識に基づいた、季節に最適化した持ち物リストを提供してください。"""
-            )
-        
-        # LLMの初期化とチェーンの構築
         try:
-            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
-            chain = prompt_template | llm
-            
             # スピナーを表示しながら処理
             with st.spinner("🤔 持ち物リストを生成中..."):
-                if selection_mode == "宿泊日数で計画":
-                    response = chain.invoke({
-                        "destination": destination,
-                        "duration_info": duration_info,
-                        "trip_type": trip_type,
-                        "additional_info": additional_info if additional_info else "なし"
-                    })
-                else:
-                    response = chain.invoke({
-                        "destination": destination,
-                        "season": season,
-                        "trip_type": trip_type,
-                        "additional_info": additional_info if additional_info else "なし"
-                    })
+                result = generate_packing_list(
+                    destination=destination,
+                    selection_mode=selection_mode,
+                    trip_type=trip_type,
+                    additional_info=additional_info,
+                    duration_days=days if selection_mode == "宿泊日数で計画" else None,
+                    season=season if selection_mode == "季節で計画" else None
+                )
             
             # 結果を表示
             st.divider()
             st.success("✅ 持ち物リストが生成されました！")
-            st.markdown(response.content)
+            st.markdown(result)
             
             # ダウンロード機能用にセッション状態に保存
-            st.session_state.generated_list = response.content
+            st.session_state.generated_list = result
             
         except Exception as e:
             st.error(f"エラーが発生しました: {str(e)}")
